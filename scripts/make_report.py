@@ -185,7 +185,8 @@ def fmt(v, nd=2):
 # --------------------------------------------------------------------------- #
 #  Cover
 # --------------------------------------------------------------------------- #
-def build_cover(doc: Document, title: str) -> None:
+def build_cover(doc: Document, title: str, author: str = "", sid: str = "",
+                department: str = "") -> None:
     for _ in range(2):
         para(doc, "", indent_chars=0, space_after=0)
     p = doc.add_paragraph(); p.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -200,9 +201,9 @@ def build_cover(doc: Document, title: str) -> None:
         ("课程名称：", "具身智能系统项目实践"),
         ("", "（模拟专利撰写）"),
         ("设计题目：", title),
-        ("院    系：", "航天学院 控制科学与工程"),
-        ("设 计 者：", "〔填写姓名〕"),
-        ("学    号：", "〔填写学号〕"),
+        ("院    系：", department or "〔填写院系〕"),
+        ("设 计 者：", author or "〔填写姓名〕"),
+        ("学    号：", sid or "〔填写学号〕"),
         ("指导教师：", "张淼"),
         ("设计时间：", "2026 年秋季学期"),
     ]
@@ -795,6 +796,10 @@ def main(argv=None) -> int:
                     default="一种基于预测感知与残差强化学习的可回收火箭垂直回收制导方法及系统")
     ap.add_argument("--figures-after-embodiments", action="store_true",
                     help="place all figures after 具体实施方式 (patent style)")
+    ap.add_argument("--author", type=str, default="裴志轩", help="设计者姓名")
+    ap.add_argument("--sid", type=str, default="2024113035", help="学号")
+    ap.add_argument("--department", type=str, default="计算学部 人工智能",
+                    help="院系")
     args = ap.parse_args(argv)
 
     run = Path(args.run)
@@ -826,7 +831,8 @@ def main(argv=None) -> int:
     style.element.rPr.rFonts.set(qn("w:eastAsia"), CN_FONT)
 
     build_task_page(doc)
-    build_cover(doc, args.title)
+    build_cover(doc, args.title, author=args.author, sid=args.sid,
+                department=args.department)
 
     # title, centred
     p = doc.add_paragraph()
@@ -851,9 +857,22 @@ def main(argv=None) -> int:
     print(f"  wrote {out_docx}")
 
     # ---- try to produce a PDF via Word COM (Windows) --------------------
+    #
+    # Two things bite here on Windows:
+    #   * PowerShell writes its output in the console's OEM code page, so
+    #     ``text=True`` (which assumes UTF-8) can raise UnicodeDecodeError on
+    #     stderr -- decode as bytes with ``errors="replace"`` instead;
+    #   * the target PDF may be locked by a viewer (Foxit/Reader).  Remove any
+    #     stale file first, and judge success by *whether this run produced a
+    #     new file*, not by ``path.exists()`` (which an old file satisfies).
     pdf_path = out / "课程报告_专利格式.pdf"
     try:
         import subprocess
+        if pdf_path.exists():
+            try:
+                pdf_path.unlink()
+            except OSError as exc:
+                print(f"  [pdf] cannot replace {pdf_path.name} (locked?): {exc}")
         ps = (
             "$w = New-Object -ComObject Word.Application; $w.Visible = $false; "
             f"$d = $w.Documents.Open('{out_docx.resolve()}', $false, $true); "
@@ -861,12 +880,12 @@ def main(argv=None) -> int:
             "$d.Close($false); $w.Quit(); Write-Output 'OK'"
         )
         r = subprocess.run(["powershell", "-NoProfile", "-Command", ps],
-                           capture_output=True, text=True, timeout=180)
+                           capture_output=True, errors="replace", timeout=240)
         if pdf_path.exists():
             print(f"  wrote {pdf_path}")
         else:
-            print(f"  [pdf] conversion did not produce a file: {r.stdout.strip()} "
-                  f"{r.stderr.strip()[:200]}")
+            print(f"  [pdf] conversion did not produce a file: "
+                  f"{(r.stdout or '').strip()[:150]} {(r.stderr or '').strip()[:150]}")
     except Exception as exc:  # noqa: BLE001
         print(f"  [pdf] skipped: {exc}")
 

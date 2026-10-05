@@ -39,3 +39,7 @@ desktop.ini
 # ---- Local scratch ----
 _extract/
 *.tmp
+
+# freshly generated report PDF awaiting swap (viewer had the target locked)
+runs/**/_new_report.pdf
+runs/**/_old.pdf
