@@ -1,0 +1,15 @@
+# ZQ3-Recovery-RL 运行依赖
+# 仅需 CPU；torch 用 CPU 版即可（Windows 默认 pip 安装即为 CPU 版）
+# 安装： pip install -r requirements.txt
+
+numpy>=1.26,<3.0
+torch>=2.1
+matplotlib>=3.7
+pandas>=2.0
+
+# 说明：
+#   - 核心库（src/zq3rl）只依赖 numpy 与 torch；
+#   - matplotlib / pandas 仅用于 scripts/make_figures.py 绘图与 CSV 统计；
+#   - 浏览器演示（web/）不需要任何 Python 包，Three.js 已内置在 web/vendor/；
+#   - 不依赖 Gym / Gymnasium / Stable-Baselines3：PPO 与 RL 环境均为自研实现，
+#     便于在报告中逐行引用算法。

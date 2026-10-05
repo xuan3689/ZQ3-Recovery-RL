@@ -1,0 +1,186 @@
+{
+  "args": {
+    "steps": 400000,
+    "seed": 0,
+    "out": "runs",
+    "run_name": "ppo_fixed",
+    "lr": null,
+    "rollout": 2048,
+    "hidden": null,
+    "no_prediction": false,
+    "no_residual": false,
+    "no_sensors": false,
+    "device": "cpu",
+    "quiet": true
+  },
+  "config": {
+    "rocket": {
+      "m0": 30000.0,
+      "m_dry": 25500.0,
+      "isp": 330.0,
+      "thrust_max_acc0": 0.0,
+      "throttle_min": 0.35,
+      "throttle_max": 1.0,
+      "throttle_tau": 0.15,
+      "diameter": 4.5,
+      "cd": 0.85,
+      "tilt_max_deg": 25.0,
+      "tilt_max_terminal_deg": 8.0,
+      "tilt_rate_max_deg": 30.0,
+      "att_wn": 3.5,
+      "att_zeta": 0.9,
+      "twr0": 2.2,
+      "thrust_scale_range": [
+        0.82,
+        1.0
+      ],
+      "leg_height": 6.0
+    },
+    "mission": {
+      "alt0": 2500.0,
+      "ignite_alt": 1600.0,
+      "target": [
+        0.0,
+        6.0,
+        0.0
+      ],
+      "v_target_y": -1.5,
+      "v0_y": -150.0,
+      "x0_range": [
+        100.0,
+        650.0
+      ],
+      "z0_range": [
+        -200.0,
+        200.0
+      ],
+      "v0_x_range": [
+        -42.0,
+        -12.0
+      ],
+      "v0_z_range": [
+        -18.0,
+        18.0
+      ],
+      "pos_tol": 3.0,
+      "vel_tol": 2.5,
+      "tilt_tol_deg": 8.0,
+      "max_time": 70.0
+    },
+    "wind": {
+      "base_speed_range": [
+        0.0,
+        22.0
+      ],
+      "direction_range": [
+        0.0,
+        6.283185307179586
+      ],
+      "shear_alt": 350.0,
+      "shear_gain": 0.85,
+      "turb_sigma": 3.2,
+      "turb_tau": 2.5,
+      "enable": true
+    },
+    "sensors": {
+      "imu_rate": 100.0,
+      "gnss_rate": 10.0,
+      "baro_rate": 20.0,
+      "accel_noise": 0.03,
+      "accel_bias0": 0.06,
+      "accel_bias_rw": 0.004,
+      "gyro_noise_deg": 0.05,
+      "gyro_bias0_deg": 0.3,
+      "gyro_bias_rw_deg": 0.01,
+      "gnss_pos_noise": 1.2,
+      "gnss_vel_noise": 0.25,
+      "baro_noise": 0.35,
+      "enable": true
+    },
+    "estimator": {
+      "pos_init_std": 3.0,
+      "vel_init_std": 1.5,
+      "bias_init_std": 0.5,
+      "accel_noise_std": 0.12,
+      "bias_rw_std": 0.1,
+      "gnss_pos_std": 1.3,
+      "gnss_vel_std": 0.28,
+      "baro_std": 0.4,
+      "att_init_std_deg": 1.0,
+      "gyro_bias_init_std_deg": 0.5,
+      "att_process_std_deg": 0.05,
+      "gyro_bias_rw_deg": 0.01,
+      "aero_dir_std_deg": 4.0,
+      "aero_min_accel": 0.35,
+      "use_aero_tilt_update": false,
+      "tilt_prior_std_deg": 1.2,
+      "azim_prior_std_deg": 2.0,
+      "dist_lpf_tau": 0.25,
+      "enable_nav": true,
+      "enable_attitude": true,
+      "enable_disturbance": true
+    },
+    "guidance": {
+      "tgo_min": 6.0,
+      "tgo_margin": 1.06,
+      "tgo_safety": 1.3,
+      "accel_limit_frac": 0.92,
+      "kp_pos": 0.35,
+      "kd_vel": 1.05,
+      "residual_max": 4.0,
+      "use_disturbance_ff": false,
+      "dist_ff_gain": 1.0,
+      "ff_schedule_alt": 900.0,
+      "ff_full_alt": 150.0
+    },
+    "env": {
+      "dt_ctrl": 0.05,
+      "dt_phys": 0.01,
+      "coast_time": 0.0,
+      "w_quality": 60.0,
+      "w_pos": 50.0,
+      "w_vel": 50.0,
+      "w_fuel": 0.0,
+      "w_tilt": 0.05,
+      "w_residual": 0.05,
+      "w_tgo": 0.0,
+      "r_success": 100.0,
+      "r_crash": -100.0,
+      "r_partial_pos": 0.0,
+      "r_partial_vel": 0.0,
+      "obs_clip": 10.0,
+      "curriculum_stages": 4
+    },
+    "ppo": {
+      "total_steps": 400000,
+      "rollout_steps": 2048,
+      "epochs": 6,
+      "minibatch": 256,
+      "gamma": 0.995,
+      "gae_lambda": 0.95,
+      "clip": 0.2,
+      "lr": 0.0003,
+      "lr_final_frac": 0.15,
+      "entropy_coef": 0.004,
+      "value_coef": 0.6,
+      "max_grad_norm": 0.6,
+      "hidden": 160,
+      "seed": 0,
+      "device": "cpu",
+      "log_every": 5,
+      "save_every": 25
+    }
+  },
+  "environment": {
+    "python": "3.13.2",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "machine": "AMD64",
+    "processor": "Intel64 Family 6 Model 170 Stepping 4, GenuineIntel",
+    "numpy": "2.1.1",
+    "timestamp": "2026-10-05T02:33:17",
+    "git": "unknown",
+    "torch": "2.6.0+cpu",
+    "torch_threads": 14,
+    "matplotlib": "3.10.1"
+  }
+}

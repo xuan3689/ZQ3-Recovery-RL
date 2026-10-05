@@ -1,0 +1,951 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>朱雀三号垂直回收 · 预测感知 + 残差强化学习</title>
+<style>
+  :root {
+    --bg: #0a0f16;
+    --panel: rgba(14, 21, 31, 0.92);
+    --line: rgba(96, 165, 250, 0.22);
+    --text: #d8e3f0;
+    --dim: #7f93a8;
+    --accent: #4ea8ff;
+    --ok: #46d68a;
+    --bad: #ff5f56;
+    --warn: #ffc44d;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: var(--bg); color: var(--text);
+    font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    font-size: 13px;
+  }
+  #app { position: fixed; inset: 0; }
+  canvas { display: block; }
+
+  .panel {
+    position: absolute; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 8px;
+    backdrop-filter: blur(6px); padding: 10px 12px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.45);
+  }
+  .panel h2 {
+    margin: 0 0 8px; font-size: 12px; font-weight: 600;
+    letter-spacing: .08em; text-transform: uppercase; color: var(--accent);
+  }
+
+  /* ---- header ---- */
+  #header {
+    top: 12px; left: 12px; right: 12px; height: 46px;
+    display: flex; align-items: center; gap: 18px;
+  }
+  #header .title { font-size: 14px; font-weight: 600; letter-spacing: .02em; }
+  #header .title small { color: var(--dim); font-weight: 400; margin-left: 8px; }
+  #header .spacer { flex: 1; }
+  .badge {
+    font-size: 11px; padding: 3px 9px; border-radius: 999px;
+    border: 1px solid var(--line); color: var(--dim);
+  }
+  .badge.on { color: var(--ok); border-color: rgba(70,214,138,.5); }
+
+  /* ---- left: controller telemetry ---- */
+  #telemetry { top: 70px; left: 12px; width: 300px; }
+  .ctlr { margin-bottom: 10px; }
+  .ctlr:last-child { margin-bottom: 0; }
+  .ctlr-head {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
+    font-weight: 600;
+  }
+  .dot { width: 9px; height: 9px; border-radius: 50%; }
+  .dot.a { background: var(--warn); }
+  .dot.b { background: var(--accent); }
+  .ctlr-head .tag {
+    margin-left: auto; font-size: 10px; font-weight: 500;
+    color: var(--dim); letter-spacing: .04em;
+  }
+  .grid {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 3px 10px; font-size: 12px;
+  }
+  .grid .k { color: var(--dim); }
+  .grid .v { text-align: right; font-variant-numeric: tabular-nums; }
+  .v.good { color: var(--ok); }
+  .v.bad  { color: var(--bad); }
+  .v.warn { color: var(--warn); }
+
+  /* ---- right: controls ---- */
+  #controls { top: 70px; right: 12px; width: 268px; }
+  .row { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
+  .row label { flex: 1; color: var(--dim); font-size: 12px; }
+  .row output { width: 46px; text-align: right; font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 118px; accent-color: var(--accent); }
+  button {
+    width: 100%; padding: 8px; margin-top: 2px; cursor: pointer;
+    background: linear-gradient(180deg, #1b2a3d, #16222f);
+    color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; font-size: 12px; font-family: inherit;
+    transition: border-color .15s, background .15s;
+  }
+  button:hover { border-color: var(--accent); background: #1e3048; }
+  button.primary { border-color: rgba(78,168,255,.55); }
+  button.on { background: #1d3a56; border-color: var(--accent); }
+
+  /* ---- bottom: timeline ---- */
+  #timeline { bottom: 12px; left: 12px; right: 12px; height: 74px; padding: 8px 12px; }
+  #timeline canvas { width: 100%; height: 42px; display: block; }
+  #timeline .legend {
+    display: flex; gap: 16px; font-size: 11px; color: var(--dim); margin-top: 4px;
+  }
+  #timeline .legend i {
+    display: inline-block; width: 9px; height: 9px;
+    border-radius: 2px; margin-right: 5px;
+  }
+
+  /* ---- scoreboard ---- */
+  #score { top: 70px; left: 50%; transform: translateX(-50%); width: 330px; text-align: center; }
+  #score .verdict { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+  #score .sub { font-size: 11px; color: var(--dim); }
+  #score table { width: 100%; font-size: 12px; border-collapse: collapse; margin-top: 6px; }
+  #score td { padding: 2px 4px; }
+  #score td:first-child { text-align: left; color: var(--dim); }
+  #score td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+  #score thead td { color: var(--accent); font-size: 11px; }
+
+  #hint {
+    position: absolute; bottom: 96px; left: 50%; transform: translateX(-50%);
+    font-size: 11px; color: var(--dim); text-align: center; pointer-events: none;
+  }
+  #loading {
+    position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; background: var(--bg); z-index: 50;
+    flex-direction: column; gap: 14px;
+  }
+  #loading .bar { width: 260px; height: 3px; background: #16222f; border-radius: 2px; overflow: hidden; }
+  #loading .bar i { display: block; height: 100%; width: 30%; background: var(--accent); }
+  #loading p { color: var(--dim); margin: 0; font-size: 12px; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<div id="loading">
+  <p id="loading-text">正在加载仿真数据…</p>
+  <div class="bar"><i></i></div>
+</div>
+
+<div class="panel" id="header">
+  <div class="title">朱雀三号垂直回收<small>预测感知 + 残差强化学习制导</small></div>
+  <div class="spacer"></div>
+  <div class="badge" id="badge-data">数据: —</div>
+  <div class="badge" id="badge-model">模型: —</div>
+</div>
+
+<div class="panel" id="telemetry">
+  <h2>双控制器遥测</h2>
+  <div class="ctlr">
+    <div class="ctlr-head">
+      <span class="dot a"></span><span>基线：分层解析制导</span>
+      <span class="tag">BASELINE</span>
+    </div>
+    <div class="grid" id="tel-a"></div>
+  </div>
+  <div class="ctlr">
+    <div class="ctlr-head">
+      <span class="dot b"></span><span>本发明：预测感知 + 残差RL</span>
+      <span class="tag">PROPOSED</span>
+    </div>
+    <div class="grid" id="tel-b"></div>
+  </div>
+</div>
+
+<div class="panel" id="score">
+  <div class="verdict" id="verdict">等待开始</div>
+  <div class="sub" id="verdict-sub">同一扰动下并排对比</div>
+  <table id="score-table">
+    <thead><tr><td>指标</td><td>基线</td><td>本发明</td></tr></thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<div class="panel" id="controls">
+  <h2>任务与扰动</h2>
+  <div class="row"><label>初始下压速度</label>
+    <input type="range" id="s-vy" min="80" max="220" value="150" step="5" />
+    <output id="o-vy">150</output></div>
+  <div class="row"><label>水平初始偏差</label>
+    <input type="range" id="s-off" min="0" max="800" value="420" step="20" />
+    <output id="o-off">420</output></div>
+  <div class="row"><label>平均风速</label>
+    <input type="range" id="s-wind" min="0" max="35" value="18" step="1" />
+    <output id="o-wind">18</output></div>
+  <div class="row"><label>低空风切变</label>
+    <input type="range" id="s-shear" min="0" max="150" value="85" step="5" />
+    <output id="o-shear">85</output></div>
+  <div class="row"><label>阵风强度</label>
+    <input type="range" id="s-gust" min="0" max="800" value="320" step="20" />
+    <output id="o-gust">320</output></div>
+  <div class="row"><label>时间倍率</label>
+    <input type="range" id="s-speed" min="0.25" max="4" value="1.5" step="0.25" />
+    <output id="o-speed">1.5</output></div>
+  <button id="btn-play" class="primary">▶ 开始回收</button>
+  <button id="btn-reset">↺ 重新生成扰动</button>
+  <button id="btn-trail" class="on">轨迹线: 开</button>
+</div>
+
+<div id="hint">鼠标左键拖拽旋转视角 · 滚轮缩放 · 右键平移</div>
+
+<div class="panel" id="timeline">
+  <canvas id="tl-canvas"></canvas>
+  <div class="legend">
+    <span><i style="background:#ffc44d"></i>基线高度</span>
+    <span><i style="background:#4ea8ff"></i>本发明高度</span>
+    <span><i style="background:#ff5f56"></i>触地事件</span>
+    <span style="margin-left:auto" id="tl-time">t = 0.0 s</span>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.js" } }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+/* =====================================================================
+   1.  Configuration
+   ===================================================================== */
+const CFG = {
+  padRadius: 35,
+  towerHeight: 65,
+  groundSize: 2600,
+  bodyRadius: 2.25,
+  bodyHeight: 47,
+  legLength: 7,
+  landingOffset: 6.0,
+};
+
+const state = {
+  data: null,
+  baseline: null,     // trajectory being replayed
+  proposed: null,
+  playing: false,
+  t: 0,
+  speed: 1.5,
+  showTrail: true,
+  finished: false,
+  lastFrame: 0,
+};
+
+/* =====================================================================
+   2.  Renderer / scene / camera
+   ===================================================================== */
+const app = document.getElementById('app');
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+app.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0d1621);
+scene.fog = new THREE.FogExp2(0x0d1621, 0.00042);
+
+const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 1, 8000);
+camera.position.set(520, 340, 620);
+
+/* =====================================================================
+   3.  Lighting
+   ===================================================================== */
+const sun = new THREE.DirectionalLight(0xfff0dd, 2.1);
+sun.position.set(420, 700, 260);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+const sc = sun.shadow.camera;
+sc.left = -600; sc.right = 600; sc.top = 600; sc.bottom = -600;
+sc.near = 1; sc.far = 2200;
+scene.add(sun);
+
+scene.add(new THREE.AmbientLight(0x9fb8d0, 0.55));
+scene.add(new THREE.HemisphereLight(0x8ec5ff, 0x3a3025, 0.55));
+
+/* =====================================================================
+   4.  Ground, pad, tower
+   ===================================================================== */
+function noiseTexture(size = 1024, base = [34, 40, 48], amp = 22) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const g = c.getContext('2d');
+  g.fillStyle = `rgb(${base[0]},${base[1]},${base[2]})`;
+  g.fillRect(0, 0, size, size);
+
+  // Large-scale low-frequency blotches break up the tile repetition far more
+  // than per-pixel noise does, because the eye picks up the repeated *pattern*,
+  // not the grain.
+  for (let i = 0; i < 90; i++) {
+    const r = 60 + Math.random() * 220;
+    const v = (Math.random() - 0.5) * amp * 1.6;
+    const grd = g.createRadialGradient(
+      Math.random() * size, Math.random() * size, 0,
+      Math.random() * size, Math.random() * size, r);
+    grd.addColorStop(0, `rgba(${base[0] + v | 0},${base[1] + v | 0},${base[2] + v | 0},0.55)`);
+    grd.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = grd;
+    g.fillRect(0, 0, size, size);
+  }
+  // fine grain
+  const img = g.getImageData(0, 0, size, size);
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const n = (Math.random() - 0.5) * amp * 0.9;
+    d[i] += n; d[i + 1] += n; d[i + 2] += n;
+  }
+  g.putImageData(img, 0, 0);
+
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+}
+
+const groundTex = noiseTexture(1024, [30, 36, 43], 20);
+// a modest repeat keeps the texture from reading as a grid at this zoom level
+groundTex.repeat.set(9, 9);
+groundTex.anisotropy = 8;
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(CFG.groundSize, CFG.groundSize),
+  new THREE.MeshStandardMaterial({ map: groundTex, roughness: 0.95, metalness: 0.02 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// landing pad with painted markings
+function padTexture() {
+  const s = 512;
+  const c = document.createElement('canvas');
+  c.width = c.height = s;
+  const g = c.getContext('2d');
+  const cx = s / 2;
+  g.fillStyle = '#31363d'; g.beginPath(); g.arc(cx, cx, cx - 4, 0, 7); g.fill();
+  g.strokeStyle = 'rgba(255,255,255,0.85)'; g.lineWidth = 6;
+  g.beginPath(); g.moveTo(cx, 26); g.lineTo(cx, s - 26);
+  g.moveTo(26, cx); g.lineTo(s - 26, cx); g.stroke();
+  g.strokeStyle = 'rgba(255,255,255,0.32)'; g.lineWidth = 3;
+  for (let r = 40; r < 220; r += 34) { g.beginPath(); g.arc(cx, cx, r, 0, 7); g.stroke(); }
+  g.strokeStyle = '#d84b3f'; g.lineWidth = 5; g.setLineDash([12, 12]);
+  g.beginPath(); g.arc(cx, cx, 232, 0, 7); g.stroke();
+  g.setLineDash([]);
+  g.fillStyle = 'rgba(255,255,255,0.9)';
+  g.font = 'bold 30px monospace'; g.textAlign = 'center';
+  g.fillText('ZHUQUE-3', cx, cx - 14);
+  g.font = 'bold 22px monospace';
+  g.fillText('LANDSPACE', cx, cx + 22);
+  const t = new THREE.CanvasTexture(c);
+  t.anisotropy = 8;
+  return t;
+}
+
+const pad = new THREE.Mesh(
+  new THREE.CylinderGeometry(CFG.padRadius, CFG.padRadius + 0.6, 0.9, 64),
+  new THREE.MeshStandardMaterial({ map: padTexture(), roughness: 0.75, metalness: 0.1 })
+);
+pad.position.y = 0.45;
+pad.receiveShadow = true;
+scene.add(pad);
+
+// marker lights in a ring
+const markerGroup = new THREE.Group();
+const markerMat = new THREE.MeshStandardMaterial({
+  color: 0x8a1f18, emissive: 0xff3322, emissiveIntensity: 1.1, roughness: 0.5,
+});
+for (let i = 0; i < 12; i++) {
+  const a = (i / 12) * Math.PI * 2;
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 3.4, 10), markerMat);
+  m.position.set(Math.cos(a) * 42, 1.7, Math.sin(a) * 42);
+  markerGroup.add(m);
+}
+scene.add(markerGroup);
+
+// recovery tower
+const tower = new THREE.Group();
+const steel = new THREE.MeshStandardMaterial({ color: 0x8e9aa8, roughness: 0.45, metalness: 0.85 });
+for (const [dx, dz] of [[-9, -9], [9, -9], [-9, 9], [9, 9]]) {
+  const leg = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.75, 0.9, CFG.towerHeight, 12), steel);
+  leg.position.set(dx, CFG.towerHeight / 2, dz);
+  leg.castShadow = true;
+  tower.add(leg);
+}
+for (const h of [22, 44, 63]) {
+  const beam = new THREE.Mesh(new THREE.BoxGeometry(19.5, 1.1, 1.1), steel);
+  beam.position.set(0, h, -9); beam.castShadow = true; tower.add(beam);
+  const beam2 = beam.clone(); beam2.position.z = 9; tower.add(beam2);
+}
+tower.position.set(-46, 0, -46);
+scene.add(tower);
+
+/* =====================================================================
+   5.  Rocket model
+   ===================================================================== */
+function makeRocket(accent) {
+  const g = new THREE.Group();
+
+  const bodyMat = new THREE.MeshStandardMaterial({
+    color: 0xe8ecef, metalness: 0.55, roughness: 0.32,
+  });
+  const darkMat = new THREE.MeshStandardMaterial({
+    color: 0x2a3038, metalness: 0.75, roughness: 0.35,
+  });
+  const accentMat = new THREE.MeshStandardMaterial({
+    color: accent, metalness: 0.6, roughness: 0.3,
+    emissive: accent, emissiveIntensity: 0.16,
+  });
+
+  // main body (origin at the base, +Y up the stack)
+  const body = new THREE.Mesh(
+    new THREE.CylinderGeometry(CFG.bodyRadius, CFG.bodyRadius, CFG.bodyHeight, 32),
+    bodyMat);
+  body.position.y = CFG.bodyHeight / 2;
+  body.castShadow = true;
+  g.add(body);
+
+  // accent band + interstage
+  const band = new THREE.Mesh(
+    new THREE.CylinderGeometry(CFG.bodyRadius * 1.02, CFG.bodyRadius * 1.02, 3.2, 32),
+    accentMat);
+  band.position.y = CFG.bodyHeight * 0.62;
+  g.add(band);
+
+  const interstage = new THREE.Mesh(
+    new THREE.CylinderGeometry(CFG.bodyRadius * 1.01, CFG.bodyRadius * 1.01, 6.5, 32),
+    darkMat);
+  interstage.position.y = CFG.bodyHeight - 3.2;
+  g.add(interstage);
+
+  // nose cap
+  const cap = new THREE.Mesh(
+    new THREE.SphereGeometry(CFG.bodyRadius, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2),
+    darkMat);
+  cap.position.y = CFG.bodyHeight;
+  g.add(cap);
+
+  // 9-engine cluster (1 centre + 8 ring)
+  const nozzleMat = new THREE.MeshStandardMaterial({
+    color: 0x3b424c, metalness: 0.9, roughness: 0.28 });
+  for (let i = -1; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    const r = i < 0 ? 0 : 1.45;
+    const n = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.42, 0.66, 1.5, 14, 1, true), nozzleMat);
+    n.position.set(Math.cos(a) * r, -0.55, Math.sin(a) * r);
+    n.rotation.x = Math.PI;
+    g.add(n);
+  }
+
+  // 4 grid fins
+  const finMat = new THREE.MeshStandardMaterial({
+    color: 0x59616c, metalness: 0.8, roughness: 0.35, side: THREE.DoubleSide });
+  const fins = [];
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    const holder = new THREE.Group();
+    const fin = new THREE.Mesh(new THREE.BoxGeometry(3.6, 2.4, 0.22), finMat);
+    fin.castShadow = true;
+    holder.add(fin);
+    holder.position.set(
+      Math.cos(a) * CFG.bodyRadius, CFG.bodyHeight * 0.88, Math.sin(a) * CFG.bodyRadius);
+    holder.lookAt(new THREE.Vector3(0, CFG.bodyHeight * 0.88, 0));
+    g.add(holder);
+    fins.push(fin);
+  }
+
+  // 4 landing legs (stowed vertical -> deployed outward)
+  const legMat = new THREE.MeshStandardMaterial({
+    color: 0x99a3b0, metalness: 0.85, roughness: 0.3 });
+  const legs = [];
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    const pivot = new THREE.Group();
+    pivot.position.set(
+      Math.cos(a) * CFG.bodyRadius * 0.95, 2.4, Math.sin(a) * CFG.bodyRadius * 0.95);
+    const leg = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.34, 0.26, CFG.legLength, 10), legMat);
+    leg.position.y = -CFG.legLength / 2;
+    leg.castShadow = true;
+    pivot.add(leg);
+    pivot.userData = {
+      stowed: new THREE.Quaternion(),
+      deployed: new THREE.Quaternion().setFromUnitVectors(
+        new THREE.Vector3(0, -1, 0),
+        new THREE.Vector3(Math.cos(a) * 0.62, -1, Math.sin(a) * 0.62).normalize()),
+      progress: 0,
+    };
+    g.add(pivot);
+    legs.push(pivot);
+  }
+
+  // engine plume
+  const plumes = [];
+  for (let i = -1; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    const r = i < 0 ? 0 : 1.45;
+    const plume = new THREE.Mesh(
+      new THREE.ConeGeometry(0.72, 9, 14, 1, true),
+      new THREE.MeshBasicMaterial({
+        color: 0xffa23a, transparent: true, opacity: 0.72,
+        blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    plume.position.set(Math.cos(a) * r, -5.2, Math.sin(a) * r);
+    plume.rotation.x = Math.PI;
+    plume.userData.phase = i * 0.7;
+    g.add(plume);
+    plumes.push(plume);
+  }
+
+  return { group: g, legs, plumes, fins };
+}
+
+/* =====================================================================
+   6.  Scenes for the two controllers
+   ===================================================================== */
+const SIDE = 210;   // lateral separation between the two runs
+const rigA = new THREE.Group(); rigA.position.x = -SIDE;
+const rigB = new THREE.Group(); rigB.position.x = +SIDE;
+scene.add(rigA, rigB);
+
+const rocketA = makeRocket(0xffc44d);
+const rocketB = makeRocket(0x4ea8ff);
+rigA.add(rocketA.group);
+rigB.add(rocketB.group);
+
+function makeTrail(color) {
+  const N = 900;
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 3), 3));
+  geo.setDrawRange(0, 0);
+  const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.85 });
+  const line = new THREE.Line(geo, mat);
+  line.frustumCulled = false;
+  return line;
+}
+const trailA = makeTrail(0xffc44d);
+const trailB = makeTrail(0x4ea8ff);
+scene.add(trailA, trailB);
+
+// target markers on the ground
+function makeTargetRing(color) {
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(4.2, 5.4, 48),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.75,
+                                  side: THREE.DoubleSide }));
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = 1.1;
+  return ring;
+}
+const tgtA = makeTargetRing(0xffc44d); tgtA.position.x = -SIDE;
+const tgtB = makeTargetRing(0x4ea8ff); tgtB.position.x = +SIDE;
+scene.add(tgtA, tgtB);
+
+/* =====================================================================
+   7.  Trajectory replay
+   ===================================================================== */
+function unpack(traj) {
+  const n = traj.n;
+  const pos = new Float32Array(n * 3);
+  const vel = new Float32Array(n * 3);
+  const est = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    for (let k = 0; k < 3; k++) {
+      pos[i * 3 + k] = traj.pos[i * 3 + k];
+      vel[i * 3 + k] = traj.vel[i * 3 + k];
+      est[i * 3 + k] = traj.est_pos[i * 3 + k];
+    }
+  }
+  return { ...traj, pos, vel, est };
+}
+
+/** Sample a trajectory at a fractional index (linear interpolation). */
+function sample(traj, idx) {
+  const n = traj.n;
+  const i = Math.max(0, Math.min(n - 1.001, idx));
+  const i0 = Math.floor(i), i1 = Math.min(n - 1, i0 + 1), f = i - i0;
+  const lerp = (a, b) => a + (b - a) * f;
+  return {
+    x: lerp(traj.pos[i0 * 3], traj.pos[i1 * 3]),
+    y: lerp(traj.pos[i0 * 3 + 1], traj.pos[i1 * 3 + 1]),
+    z: lerp(traj.pos[i0 * 3 + 2], traj.pos[i1 * 3 + 2]),
+    vx: lerp(traj.vel[i0 * 3], traj.vel[i1 * 3]),
+    vy: lerp(traj.vel[i0 * 3 + 1], traj.vel[i1 * 3 + 1]),
+    vz: lerp(traj.vel[i0 * 3 + 2], traj.vel[i1 * 3 + 2]),
+    tilt: lerp(traj.tilt_deg[i0], traj.tilt_deg[i1]),
+    throttle: lerp(traj.throttle[i0], traj.throttle[i1]),
+    dist: lerp(Math.hypot(traj.dist_est[i0 * 3], traj.dist_est[i0 * 3 + 1],
+                          traj.dist_est[i0 * 3 + 2]),
+               Math.hypot(traj.dist_est[i1 * 3], traj.dist_est[i1 * 3 + 1],
+                          traj.dist_est[i1 * 3 + 2])),
+    pred: lerp(Math.hypot(traj.dist_pred[i0 * 3], traj.dist_pred[i0 * 3 + 1],
+                          traj.dist_pred[i0 * 3 + 2]),
+               Math.hypot(traj.dist_pred[i1 * 3], traj.dist_pred[i1 * 3 + 1],
+                          traj.dist_pred[i1 * 3 + 2])),
+    speed: Math.hypot(lerp(traj.vel[i0 * 3], traj.vel[i1 * 3]),
+                      lerp(traj.vel[i0 * 3 + 1], traj.vel[i1 * 3 + 1]),
+                      lerp(traj.vel[i0 * 3 + 2], traj.vel[i1 * 3 + 2])),
+  };
+}
+
+/** Orient the rocket along its velocity-to-go so the tilt is visible. */
+function applyPose(rocket, s, tIdx, traj) {
+  const g = rocket.group;
+  g.position.set(s.x, s.y, s.z);
+
+  // tilt direction: lean toward the horizontal acceleration demand
+  const lean = THREE.MathUtils.degToRad(Math.min(s.tilt, 25));
+  const horiz = new THREE.Vector2(s.vx, s.vz);
+  const dir = horiz.lengthSq() > 1e-6
+    ? horiz.clone().normalize() : new THREE.Vector2(0, 0);
+  const axis = new THREE.Vector3(dir.y, 0, -dir.x).normalize();
+  g.quaternion.setFromAxisAngle(axis, -lean);
+
+  // engine plume
+  const thr = s.throttle;
+  const t = performance.now() * 0.001;
+  for (const p of rocket.plumes) {
+    const flick = 0.82 + Math.sin(t * 24 + p.userData.phase) * 0.18;
+    p.scale.set(0.6 + thr * 0.9, Math.max(thr, 0.001) * flick * 1.5, 0.6 + thr * 0.9);
+    p.visible = thr > 0.03 && s.y > 0.6;
+    p.material.opacity = 0.25 + thr * 0.6;
+  }
+
+  // landing legs deploy below 200 m
+  const deploy = s.y < 200 ? 1 : 0;
+  for (const leg of rocket.legs) {
+    const u = leg.userData;
+    u.progress += (deploy - u.progress) * 0.06;
+    leg.quaternion.copy(u.stowed).slerp(u.deployed, u.progress);
+  }
+
+  // grid fins wiggle with the attitude effort
+  for (let i = 0; i < rocket.fins.length; i++) {
+    rocket.fins[i].rotation.z = Math.sin(t * 3 + i) * 0.25 * (s.tilt / 25);
+  }
+}
+
+function setTrail(line, traj, idx) {
+  const N = line.geometry.attributes.position.count;
+  const n = Math.min(Math.floor(idx) + 1, traj.n, N);
+  const arr = line.geometry.attributes.position.array;
+  for (let i = 0; i < n; i++) {
+    arr[i * 3] = traj.pos[i * 3];
+    arr[i * 3 + 1] = traj.pos[i * 3 + 1];
+    arr[i * 3 + 2] = traj.pos[i * 3 + 2];
+  }
+  line.geometry.setDrawRange(0, n);
+  line.geometry.attributes.position.needsUpdate = true;
+  line.visible = state.showTrail;
+}
+
+/* =====================================================================
+   8.  UI
+   ===================================================================== */
+const $ = (id) => document.getElementById(id);
+
+function fmt(v, d = 1) {
+  if (v === null || v === undefined || Number.isNaN(v)) return '—';
+  return v.toFixed(d);
+}
+
+function renderTelemetry(el, s, traj, idx, done) {
+  const doneAll = done;
+  const verdict = doneAll
+    ? (traj.success ? '<span class="good">成功着陆</span>' : '<span class="bad">着陆失败</span>')
+    : '';
+  el.innerHTML = `
+    <div class="k">高度</div><div class="v">${fmt(s.y)} m</div>
+    <div class="k">下降速度</div><div class="v">${fmt(-s.vy)} m/s</div>
+    <div class="k">水平偏差</div><div class="v">${fmt(Math.hypot(s.x, s.z))} m</div>
+    <div class="k">合速度</div><div class="v">${fmt(s.speed)} m/s</div>
+    <div class="k">倾角</div><div class="v">${fmt(s.tilt)}°</div>
+    <div class="k">发动机推力</div><div class="v">${fmt(s.throttle * 100, 0)}%</div>
+    <div class="k">扰动估计</div><div class="v">${fmt(s.dist, 2)} m/s²</div>
+    <div class="k">扰动预测</div><div class="v warn">${fmt(s.pred, 2)} m/s²</div>
+    <div class="k">着陆精度</div><div class="v ${traj.success ? 'good' : 'bad'}">${fmt(traj.lateral, 2)} m</div>
+    <div class="k">触地速度</div><div class="v ${traj.success ? 'good' : 'bad'}">${fmt(traj.speed, 2)} m/s</div>
+    ${verdict ? `<div class="k">结果</div><div class="v">${verdict}</div>` : ''}
+  `;
+}
+
+function renderScore(a, b) {
+  const rows = [
+    ['着陆精度 (m)', a.lateral, b.lateral, 'low'],
+    ['触地速度 (m/s)', a.speed, b.speed, 'low'],
+    ['触地倾角 (°)', a.tilt_final, b.tilt_final, 'low'],
+    ['推进剂消耗 (kg)', a.fuel_used, b.fuel_used, 'low'],
+  ];
+  const tb = $('score-table').querySelector('tbody');
+  tb.innerHTML = rows.map(([name, va, vb, mode]) => {
+    const better = mode === 'low' ? (vb < va) : (vb > va);
+    const cls = Math.abs(va - vb) < 1e-3 ? '' : (better ? 'good' : 'bad');
+    return `<tr><td>${name}</td><td>${fmt(va, 2)}</td>
+            <td class="${cls}">${fmt(vb, 2)}</td></tr>`;
+  }).join('');
+}
+
+function renderVerdict(a, b) {
+  const sa = a.success, sb = b.success;
+  let txt, sub, color;
+  if (sb && !sa) {
+    txt = '本发明成功 · 基线失败'; sub = '残差RL + 预测感知补偿了扰动';
+    color = 'var(--ok)';
+  } else if (!sb && sa) {
+    txt = '基线成功 · 本发明失败'; sub = '本次扰动下残差RL未获益';
+    color = 'var(--bad)';
+  } else if (sb && sa) {
+    const d = a.lateral - b.lateral;
+    txt = '两者均成功着陆';
+    sub = Math.abs(d) < 0.05
+      ? '精度相当'
+      : (d > 0 ? `本发明精度提升 ${fmt(d, 2)} m` : `基线精度更高 ${fmt(-d, 2)} m`);
+    color = 'var(--accent)';
+  } else {
+    txt = '两者均失败'; sub = '该扰动超出当前能力包线'; color = 'var(--bad)';
+  }
+  const v = $('verdict');
+  v.textContent = txt; v.style.color = color;
+  $('verdict-sub').textContent = sub;
+}
+
+/* timeline canvas */
+const tlCanvas = $('tl-canvas');
+const tlCtx = tlCanvas.getContext('2d');
+
+function drawTimeline(idxA, idxB, done) {
+  const w = tlCanvas.width = tlCanvas.clientWidth * devicePixelRatio;
+  const h = tlCanvas.height = tlCanvas.clientHeight * devicePixelRatio;
+  tlCtx.clearRect(0, 0, w, h);
+  if (!state.baseline) return;
+  const y0 = 620;
+
+  const plot = (traj, idx, color) => {
+    tlCtx.beginPath();
+    tlCtx.strokeStyle = color; tlCtx.lineWidth = 1.6 * devicePixelRatio;
+    const n = traj.n;
+    for (let i = 0; i < n; i++) {
+      const x = (i / (n - 1)) * w;
+      const y = h - Math.min(traj.pos[i * 3 + 1] / y0, 1) * h * 0.9 - h * 0.05;
+      i === 0 ? tlCtx.moveTo(x, y) : tlCtx.lineTo(x, y);
+    }
+    tlCtx.stroke();
+    // playhead
+    const px = (Math.min(idx, n - 1) / (n - 1)) * w;
+    tlCtx.fillStyle = color;
+    tlCtx.beginPath();
+    tlCtx.arc(px, h * 0.5, 3.2 * devicePixelRatio, 0, 7);
+    tlCtx.fill();
+  };
+  plot(state.baseline, idxA, '#ffc44d');
+  plot(state.proposed, idxB, '#4ea8ff');
+
+  if (done) {
+    tlCtx.fillStyle = 'rgba(255,95,86,0.85)';
+    tlCtx.fillRect(0, 0, w, h * 0.06);
+  }
+}
+
+/* =====================================================================
+   9.  Control wiring
+   ===================================================================== */
+function bindSlider(id, out, fmtFn = (v) => v) {
+  const el = $(id), o = $(out);
+  const upd = () => { o.textContent = fmtFn(parseFloat(el.value)); };
+  el.addEventListener('input', upd); upd();
+  return el;
+}
+
+const slVy = bindSlider('s-vy', 'o-vy', (v) => v.toFixed(0));
+const slOff = bindSlider('s-off', 'o-off', (v) => v.toFixed(0));
+const slWind = bindSlider('s-wind', 'o-wind', (v) => v.toFixed(0));
+const slShear = bindSlider('s-shear', 'o-shear', (v) => (v / 100).toFixed(2));
+const slGust = bindSlider('s-gust', 'o-gust', (v) => (v / 100).toFixed(1));
+const slSpeed = bindSlider('s-speed', 'o-speed', (v) => v.toFixed(2));
+
+$('btn-play').addEventListener('click', () => {
+  if (state.finished) { resetReplay(); return; }
+  state.playing = !state.playing;
+  $('btn-play').textContent = state.playing ? '❚❚ 暂停' : '▶ 继续';
+});
+
+$('btn-reset').addEventListener('click', () => {
+  resetReplay();
+  // pick a different scenario from the exported set
+  pickScenario((scenarioIdx + 1) % state.data.controllers.baseline.length);
+});
+
+$('btn-trail').addEventListener('click', () => {
+  state.showTrail = !state.showTrail;
+  $('btn-trail').textContent = `轨迹线: ${state.showTrail ? '开' : '关'}`;
+  $('btn-trail').classList.toggle('on', state.showTrail);
+  trailA.visible = state.showTrail; trailB.visible = state.showTrail;
+});
+
+let scenarioIdx = 0;
+
+function pickScenario(i) {
+  const C = state.data.controllers;
+  state.baseline = unpack(C.baseline[i]);
+  state.proposed = unpack(C.residual_rl[i]);
+  scenarioIdx = i;
+  resetReplay();
+  const meta = state.data.meta;
+  $('badge-data').textContent =
+    `数据: ${meta.n_episodes} 局评估 · 场景 ${i + 1}/${C.baseline.length}`;
+  $('badge-data').classList.add('on');
+}
+
+function resetReplay() {
+  state.t = 0;
+  state.playing = false;
+  state.finished = false;
+  $('btn-play').textContent = '▶ 开始回收';
+  renderScore(state.baseline, state.proposed);
+  $('verdict').textContent = '准备就绪';
+  $('verdict').style.color = 'var(--text)';
+  $('verdict-sub').textContent = `场景 ${scenarioIdx + 1} · 同一扰动并排对比`;
+  step(0);
+}
+
+/* =====================================================================
+   10.  Animation loop
+   ===================================================================== */
+function step(dt) {
+  const A = state.baseline, B = state.proposed;
+  if (!A || !B) return;
+
+  if (state.playing) {
+    state.t += dt * state.speed;
+  }
+  const tA = A.t, tB = B.t;
+  const idxA = findIdx(tA, state.t);
+  const idxB = findIdx(tB, state.t);
+
+  const sA = sample(A, idxA), sB = sample(B, idxB);
+  applyPose(rocketA, sA, idxA, A);
+  applyPose(rocketB, sB, idxB, B);
+  setTrail(trailA, A, idxA);
+  setTrail(trailB, B, idxB);
+
+  renderTelemetry($('tel-a'), sA, A, idxA, idxA >= A.n - 1.5);
+  renderTelemetry($('tel-b'), sB, B, idxB, idxB >= B.n - 1.5);
+
+  const doneA = idxA >= A.n - 1.5, doneB = idxB >= B.n - 1.5;
+  if (doneA && doneB && !state.finished) {
+    state.finished = true;
+    state.playing = false;
+    $('btn-play').textContent = '↺ 重新播放';
+    renderVerdict(A, B);
+  }
+  drawTimeline(idxA, idxB, state.finished);
+  $('tl-time').textContent = `t = ${state.t.toFixed(1)} s`;
+}
+
+function findIdx(times, t) {
+  const n = times.length;
+  if (t <= times[0]) return 0;
+  if (t >= times[n - 1]) return n - 1;
+  let lo = 0, hi = n - 1;
+  while (lo + 1 < hi) {
+    const mid = (lo + hi) >> 1;
+    if (times[mid] <= t) lo = mid; else hi = mid;
+  }
+  const span = times[hi] - times[lo];
+  const f = span > 1e-9 ? (t - times[lo]) / span : 0;
+  return lo + f;
+}
+
+let orbit = { theta: 0.72, phi: 0.98, dist: 620, target: new THREE.Vector3(0, 220, 0) };
+
+function updateCamera() {
+  const { theta, phi, dist, target } = orbit;
+  camera.position.set(
+    target.x + dist * Math.sin(phi) * Math.cos(theta),
+    target.y + dist * Math.cos(phi),
+    target.z + dist * Math.sin(phi) * Math.sin(theta));
+  camera.lookAt(target);
+}
+
+/* simple orbit controls */
+let dragging = null;
+renderer.domElement.addEventListener('mousedown', (e) => {
+  dragging = { x: e.clientX, y: e.clientY, btn: e.button };
+});
+addEventListener('mouseup', () => { dragging = null; });
+addEventListener('mousemove', (e) => {
+  if (!dragging) return;
+  const dx = e.clientX - dragging.x, dy = e.clientY - dragging.y;
+  dragging.x = e.clientX; dragging.y = e.clientY;
+  if (dragging.btn === 0) {
+    orbit.theta += dx * 0.006;
+    orbit.phi = Math.max(0.12, Math.min(1.52, orbit.phi - dy * 0.005));
+  } else {
+    const right = new THREE.Vector3().subVectors(camera.position, orbit.target)
+      .cross(camera.up).normalize();
+    orbit.target.addScaledVector(right, -dx * orbit.dist * 0.0012);
+    orbit.target.y = Math.max(0, orbit.target.y + dy * orbit.dist * 0.0012);
+  }
+});
+renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+renderer.domElement.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  orbit.dist = Math.max(180, Math.min(2600, orbit.dist * (1 + Math.sign(e.deltaY) * 0.1)));
+}, { passive: false });
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+function animate(now) {
+  requestAnimationFrame(animate);
+  const dt = Math.min((now - state.lastFrame) / 1000 || 0, 0.1);
+  state.lastFrame = now;
+  step(dt);
+  // keep the camera centred between the two runs, following the mean altitude
+  if (state.baseline) {
+    const A = state.baseline, B = state.proposed;
+    const iA = findIdx(A.t, state.t), iB = findIdx(B.t, state.t);
+    const y = (A.pos[Math.floor(iA) * 3 + 1] + B.pos[Math.floor(iB) * 3 + 1]) / 2;
+    orbit.target.y += (Math.max(y, 60) - orbit.target.y) * 0.04;
+  }
+  updateCamera();
+  renderer.render(scene, camera);
+}
+requestAnimationFrame(animate);
+
+/* =====================================================================
+   11.  Load data
+   ===================================================================== */
+async function boot() {
+  try {
+    const res = await fetch('./data/traces.json');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    state.data = await res.json();
+    $('badge-model').textContent =
+      `模型: ${state.data.meta.checkpoint.split(/[\\/]/).pop()}`;
+    $('badge-model').classList.add('on');
+    pickScenario(0);
+    $('loading').style.display = 'none';
+  } catch (err) {
+    $('loading-text').innerHTML =
+      `无法加载 <code>./data/traces.json</code>：${err.message}<br>` +
+      `<br>请先在仓库根目录运行：<br>` +
+      `<code>python scripts/evaluate.py --run runs/ppo_main2</code><br>` +
+      `然后通过 HTTP 打开本页（不要用 file://）。`;
+    console.error(err);
+  }
+}
+boot();
+</script>
+</body>
+</html>
