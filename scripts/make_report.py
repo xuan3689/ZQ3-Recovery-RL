@@ -28,6 +28,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from zq3rl.utils import banner, load_json               # noqa: E402
 
+# ``python-docx`` is an optional (report-only) dependency.  Import failure must
+# not kill ``--help`` or CI smoke tests, so defer the error to the point where a
+# document is actually built.
 try:
     import docx
     from docx import Document
@@ -37,9 +40,20 @@ try:
     from docx.oxml import OxmlElement
     from docx.oxml.ns import qn
     from docx.shared import Cm, Pt, RGBColor
-except ImportError:  # pragma: no cover
-    print("python-docx is required:  pip install python-docx")
-    raise
+    _DOCX_IMPORT_ERROR: str | None = None
+except ImportError as exc:  # pragma: no cover
+    Document = None  # type: ignore[assignment]
+    _DOCX_IMPORT_ERROR = str(exc)
+
+    def _missing_docx(*_a, **_k):  # noqa: ANN002, ANN003
+        raise SystemExit(
+            "python-docx is required to build the report:  "
+            "pip install python-docx   (or:  pip install -e '.[report]')"
+        )
+
+    Cm = Pt = RGBColor = None  # type: ignore[assignment]
+    WD_ALIGN_PARAGRAPH = WD_BREAK = WD_TABLE_ALIGNMENT = WD_SECTION = None  # type: ignore[assignment]
+    OxmlElement = qn = _missing_docx  # type: ignore[assignment]
 
 CN_FONT = "宋体"
 CN_HEAD = "黑体"
@@ -851,6 +865,12 @@ def main(argv=None) -> int:
     ap.add_argument("--department", type=str, default="计算学部 人工智能",
                     help="院系")
     args = ap.parse_args(argv)
+
+    if _DOCX_IMPORT_ERROR is not None:
+        raise SystemExit(
+            f"python-docx is required to build the report ({_DOCX_IMPORT_ERROR}).\n"
+            "  pip install python-docx   (or:  pip install -e '.[report]')"
+        )
 
     run = Path(args.run)
     out = Path(args.out) if args.out else run

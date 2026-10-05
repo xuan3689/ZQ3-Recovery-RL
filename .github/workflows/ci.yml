@@ -29,7 +29,8 @@ jobs:
           python -m pip install --upgrade pip
           # install the CPU wheel explicitly so CI does not pull a multi-GB CUDA build
           pip install torch --index-url https://download.pytorch.org/whl/cpu
-          pip install -e ".[dev,plot]"
+          # [report] brings python-docx / PyMuPDF so the report path is smoke-tested too
+          pip install -e ".[dev,plot,report]"
 
       - name: Run test suite
         run: pytest -q
