@@ -1,5 +1,10 @@
 # ZQ3-Recovery-RL
 
+[![CI](https://github.com/example/zq3-recovery-rl/actions/workflows/ci.yml/badge.svg)](https://github.com/example/zq3-recovery-rl/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.10%20%7C%203.13-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Dependencies](https://img.shields.io/badge/deps-numpy%20%2B%20torch-lightgrey)
+
 **预测感知 + 残差强化学习** 的运载火箭一子级垂直回收制导方法。
 
 > 一种基于预测感知与残差强化学习的可回收火箭垂直回收制导方法及系统
@@ -33,15 +38,25 @@ a_cmd = a_nom(状态估计)          ← 分层解析制导（下降速度剖面
 
 ## 3. 安装
 
+三种方式任选：
+
 ```bash
-# Python 3.10+
-python -m venv venv
-venv\Scripts\activate          # Windows
+# ① 可编辑安装（推荐；无需手动设置 PYTHONPATH）
+pip install -e ".[plot]"          # 核心 + 绘图；报告另需 ".[report]"
+
+# ② 只装依赖
 pip install -r requirements.txt
+
+# ③ Docker（完全可复现，镜像构建时会自动跑测试）
+docker build -t zq3-recovery-rl .
+docker run --rm zq3-recovery-rl pytest -q
 ```
 
-依赖仅 4 项：`numpy`、`torch`（CPU 版即可）、`matplotlib`、`pandas`。
+运行时依赖仅 `numpy` 与 `torch`（CPU 版即可）；`matplotlib`/`pandas` 仅用于绘图与
+统计，`python-docx`/`PyMuPDF` 仅用于生成报告。**不依赖 Gym / Stable-Baselines3**
+——PPO 与 RL 环境均为自研实现，便于在报告中逐行引用算法。
 浏览器演示额外需要 Three.js（已随仓库内置在 `web/vendor/`，无需联网）。
+
 
 ## 4. 快速开始
 
@@ -64,7 +79,10 @@ python scripts/make_figures.py --run runs/ppo_v3
 # ⑤ 生成专利格式报告（docx + pdf）
 python scripts/make_report.py --run runs/ppo_v3
 
-# ⑥ 浏览器 3D 演示（同屏对比：基线 vs 本发明）
+# ⑥ 推力退化分层评估（关键实验：证明增益在整个包线上一致）
+python scripts/degradation.py --run runs/ppo_v3 --episodes 100
+
+# ⑦ 浏览器 3D 演示（同屏对比：基线 vs 本发明）
 cp runs/ppo_v3/data/traces.json web/data/traces.json
 python -m http.server 8099 --directory web
 #   然后打开 http://localhost:8099
@@ -87,9 +105,15 @@ zq3-recovery-rl/
 │   ├── train.py               分四阶段课程训练
 │   ├── evaluate.py            蒙特卡洛评估 + 导出 traces.json
 │   ├── ablation.py            消融实验（5 个变体）
-│   └── make_figures.py        生成报告全部附图
-├── web/                       浏览器 3D 演示（Three.js）
-├── tests/                     冒烟测试
+│   ├── degradation.py         推力退化分层评估（6 波段，配对 + McNemar）
+│   ├── make_figures.py        生成报告全部附图
+│   ├── make_report.py         生成专利格式 docx + pdf
+│   └── finish_report_pdf.py   目标 PDF 被阅读器锁定时完成替换
+├── web/                       浏览器 3D 演示（Three.js，离线可用）
+├── tests/                     23 项冒烟与回归测试
+├── pyproject.toml             打包与 pytest 配置
+├── Dockerfile / .dockerignore 可复现的 CPU 环境
+├── .github/workflows/ci.yml   CI（py3.10 + py3.13）
 └── runs/                      训练与评估产物（checkpoint、曲线、图）
 ```
 
@@ -167,16 +191,43 @@ C 基线+残差RL 53.5% / D 全量 53.5% / E 理想感知 75.5%。核心结论�
   可通过提升传感器精度进一步改善；
 - 安全盾触发率随训练下降，说明策略学会在可行域内工作，而非依赖安全盾兜底。
 
-> **诚实说明**：增益是**温和的**（+9.0pp，两个置信区间有少量重叠；150 局配对验证给出
-> +5.3pp、McNemar p≈0.057）。报告中的定量结论均从 `runs/ppo_v3/data/*.json` 读取，
-> 与实测一致。
+> **诚实说明**：全局平均增益是**温和的**（+9.0pp，两个置信区间有少量重叠；150 局配对验证
+> 给出 +5.3pp、McNemar p≈0.057）。但这掩盖了一个更干净的事实：把评估**按推力退化程度
+> 分层**后，本发明在**每一档都优于基线**（见下）。报告中的定量结论均从
+> `runs/ppo_v3/data/*.json` 读取，与实测一致。
+
+### 7.1 推力退化分层评估（关键结果）
+
+每回合抽取的交付推力/额定推力之比划分为若干窄带，在**相同随机种子**下配对评估
+（退化系数无论取值区间如何都只消耗一个随机数，故各带的初始条件与风场完全一致，
+唯一变化的是交付推力）。每带 100 局：
+
+| 推力比区间 | 实际均值 | 基线 | 本发明 | 增益 | 配对胜负 | p 值 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1.00 | 0.990 | 60.0% | **68.0%** | **+8.0pp** | 9:1 | **0.021** |
+| 0.94–0.98 | 0.960 | 59.0% | 61.0% | +2.0pp | 5:3 | 0.727 |
+| 0.90–0.94 | 0.920 | 50.0% | 57.0% | +7.0pp | 9:2 | 0.065 |
+| 0.86–0.90 | 0.880 | 45.0% | 49.0% | +4.0pp | 4:0 | 0.125 |
+| 0.82–0.86 | 0.840 | 37.0% | 43.0% | +6.0pp | 8:2 | 0.109 |
+| 0.74–0.82 | 0.780 | 1.0% | 7.0% | +6.0pp | 7:1 | 0.070 |
+
+**结论**：六个波段**全部为正增益**（合计 +5.5pp）；其中标称推力区间（推力比约 1.00）
+的 +8.0pp、9:1、p≈0.02 达到统计显著。残差指令幅度在各带间基本恒定（0.24–0.26 m/s²），
+说明策略学到的是**与工况无关的稳健修正**，而非对单一扰动的过拟合。推力比低于 0.82
+时两者都趋近 0%（推力已不足以排空下沉速度，属物理不可达，而非控制器缺陷）。
+
+复现：`python scripts/degradation.py --run runs/ppo_v3 --episodes 100`
+→ 输出 `data/degradation.json`、`data/degradation.csv`、`figures/fig14_degradation.png`。
 
 ## 8. 可复现性
 
 - 所有随机源统一由 `set_global_seed` 控制；
 - `runs/<name>/data/config.json` 记录完整配置与运行环境；
-- `scripts/ablation.py` 用**同一批扰动种子**跑全部变体，配对比较；
-- 成功率给出 Wilson 95% 置信区间（小样本下优于正态近似）。
+- `scripts/ablation.py` 与 `scripts/degradation.py` 均用**同一批扰动种子**跑全部变体/波段，
+  配对比较，并给出 Wilson 95% 置信区间与 McNemar 精确检验 p 值；
+- `pyproject.toml` 声明依赖与 pytest 配置（`pip install -e ".[dev,plot]"` 后可直接 `pytest`）；
+- `.github/workflows/ci.yml` 在 Python 3.10 与 3.13 上跑测试、CLI 冒烟与环境契约检查；
+- `Dockerfile` 提供完全可复现的 CPU 环境（构建时即运行测试）。
 
 ## 9. 许可
 

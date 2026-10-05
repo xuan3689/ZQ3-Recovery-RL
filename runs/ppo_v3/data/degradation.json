@@ -1,0 +1,206 @@
+{
+  "run": "runs\\ppo_v3",
+  "checkpoint": "runs\\ppo_v3\\models\\final.pt",
+  "episodes_per_band": 100,
+  "seed": 20260101,
+  "bands": {
+    "1.00": {
+      "band": [
+        0.98,
+        1.0
+      ],
+      "thrust_scale_mean": 0.9900477689057022,
+      "n": 100,
+      "baseline": {
+        "successes": 60,
+        "success_rate": 0.6,
+        "ci95": [
+          0.5020007846184025,
+          0.6906002538863971
+        ],
+        "lateral_mean": 9.981475474139465,
+        "speed_mean": 1.7767771732921949
+      },
+      "residual_rl": {
+        "successes": 68,
+        "success_rate": 0.68,
+        "ci95": [
+          0.5833719774632081,
+          0.7633098918454312
+        ],
+        "lateral_mean": 9.904510419713883,
+        "speed_mean": 1.741814802973448,
+        "residual_mean": 0.24169937653376017
+      },
+      "gain_pp": 8.0,
+      "paired_wins": 9,
+      "paired_losses": 1,
+      "mcnemar_p": 0.021484375
+    },
+    "0.94-0.98": {
+      "band": [
+        0.94,
+        0.98
+      ],
+      "thrust_scale_mean": 0.9600955378114046,
+      "n": 100,
+      "baseline": {
+        "successes": 59,
+        "success_rate": 0.59,
+        "ci95": [
+          0.4920125056109662,
+          0.6813284290433533
+        ],
+        "lateral_mean": 10.535616451018974,
+        "speed_mean": 2.0065865593653696
+      },
+      "residual_rl": {
+        "successes": 61,
+        "success_rate": 0.61,
+        "ci95": [
+          0.5120283616749817,
+          0.699832780680298
+        ],
+        "lateral_mean": 10.346111626400347,
+        "speed_mean": 2.011764144373607,
+        "residual_mean": 0.24283253953364817
+      },
+      "gain_pp": 2.0,
+      "paired_wins": 5,
+      "paired_losses": 3,
+      "mcnemar_p": 0.7265625
+    },
+    "0.90-0.94": {
+      "band": [
+        0.9,
+        0.94
+      ],
+      "thrust_scale_mean": 0.9200955378114045,
+      "n": 100,
+      "baseline": {
+        "successes": 50,
+        "success_rate": 0.5,
+        "ci95": [
+          0.40382982859014716,
+          0.5961701714098528
+        ],
+        "lateral_mean": 11.299174449242793,
+        "speed_mean": 2.3774877651541364
+      },
+      "residual_rl": {
+        "successes": 57,
+        "success_rate": 0.57,
+        "ci95": [
+          0.4721521169586435,
+          0.6626686099947162
+        ],
+        "lateral_mean": 11.388739991075711,
+        "speed_mean": 2.364530172316607,
+        "residual_mean": 0.24708616235277872
+      },
+      "gain_pp": 7.0,
+      "paired_wins": 9,
+      "paired_losses": 2,
+      "mcnemar_p": 0.0654296875
+    },
+    "0.86-0.90": {
+      "band": [
+        0.86,
+        0.9
+      ],
+      "thrust_scale_mean": 0.8800955378114048,
+      "n": 100,
+      "baseline": {
+        "successes": 45,
+        "success_rate": 0.45,
+        "ci95": [
+          0.3561437510640346,
+          0.5475557296835656
+        ],
+        "lateral_mean": 11.864588469912325,
+        "speed_mean": 2.8956065709519896
+      },
+      "residual_rl": {
+        "successes": 49,
+        "success_rate": 0.49,
+        "ci95": [
+          0.3942183009238615,
+          0.5865215952256586
+        ],
+        "lateral_mean": 12.041637765195695,
+        "speed_mean": 2.823200151436869,
+        "residual_mean": 0.2539792058761331
+      },
+      "gain_pp": 4.0,
+      "paired_wins": 4,
+      "paired_losses": 0,
+      "mcnemar_p": 0.125
+    },
+    "0.82-0.86": {
+      "band": [
+        0.82,
+        0.86
+      ],
+      "thrust_scale_mean": 0.8400955378114046,
+      "n": 100,
+      "baseline": {
+        "successes": 37,
+        "success_rate": 0.37,
+        "ci95": [
+          0.28182212569509163,
+          0.46779652424866885
+        ],
+        "lateral_mean": 11.798134378537817,
+        "speed_mean": 4.395027267639402
+      },
+      "residual_rl": {
+        "successes": 43,
+        "success_rate": 0.43,
+        "ci95": [
+          0.3373313900052838,
+          0.5278478830413564
+        ],
+        "lateral_mean": 11.770996612717115,
+        "speed_mean": 4.117891218117347,
+        "residual_mean": 0.2554862600073915
+      },
+      "gain_pp": 6.0,
+      "paired_wins": 8,
+      "paired_losses": 2,
+      "mcnemar_p": 0.109375
+    },
+    "0.74-0.82": {
+      "band": [
+        0.74,
+        0.82
+      ],
+      "thrust_scale_mean": 0.7801910756228093,
+      "n": 100,
+      "baseline": {
+        "successes": 1,
+        "success_rate": 0.01,
+        "ci95": [
+          0.0017673865655472645,
+          0.0544875247609346
+        ],
+        "lateral_mean": 11.536652321743695,
+        "speed_mean": 8.933081801549164
+      },
+      "residual_rl": {
+        "successes": 7,
+        "success_rate": 0.07,
+        "ci95": [
+          0.034318824364064096,
+          0.13749671006529757
+        ],
+        "lateral_mean": 11.55400047696726,
+        "speed_mean": 8.193599920869946,
+        "residual_mean": 0.2535313048940933
+      },
+      "gain_pp": 6.0,
+      "paired_wins": 7,
+      "paired_losses": 1,
+      "mcnemar_p": 0.0703125
+    }
+  }
+}

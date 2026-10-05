@@ -1,0 +1,50 @@
+# Keep build context small and reproducible.
+# Note: web/vendor (Three.js) is intentionally NOT ignored -- the demo must
+# work offline, so the vendored library ships with the repo.
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+src/*.egg-info/
+
+# ---- Experiment artifacts ----
+# Model checkpoints are large; keep the run metadata and figures, drop weights.
+runs/**/models/*.pt
+runs_smoke/
+*.log
+
+# keep the small run metadata / curves / figures in git
+!runs/**/data/*.json
+!runs/**/data/*.csv
+
+# freshly generated report PDF awaiting swap (viewer had the target locked)
+runs/**/_new_report.pdf
+runs/**/_old.pdf
+
+# ---- Editor / OS ----
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- LaTeX / build by-products ----
+*.aux
+*.toc
+*.out
+*.synctex.gz
+
+# ---- Local scratch ----
+_extract/
+*.tmp
