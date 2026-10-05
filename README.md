@@ -1,6 +1,6 @@
 # ZQ3-Recovery-RL
 
-[![CI](https://github.com/example/zq3-recovery-rl/actions/workflows/ci.yml/badge.svg)](https://github.com/example/zq3-recovery-rl/actions/workflows/ci.yml)
+[![CI](https://github.com/xuan3689/ZQ3-Recovery-RL/actions/workflows/ci.yml/badge.svg)](https://github.com/xuan3689/ZQ3-Recovery-RL/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.10%20%7C%203.13-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Dependencies](https://img.shields.io/badge/deps-numpy%20%2B%20torch-lightgrey)
