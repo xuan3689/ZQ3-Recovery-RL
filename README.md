@@ -17,7 +17,7 @@
 ```
 a_cmd = a_nom(状态估计)          ← 分层解析制导（下降速度剖面 + 位置速度级联）
       + a_ff(a_pred)             ← 预测感知前馈（风矢量反演 + 前向外推）
-      + a_rl(o)                  ← PPO 残差策略，‖a_rl‖ ≤ 4 m/s²
+      + a_rl(o)                  ← PPO 残差策略，‖a_rl‖ ≤ 1 m/s²
       → 安全盾投影 → 变推力发动机 + 双向矢量摆角
 ```
 
@@ -45,22 +45,29 @@ pip install -r requirements.txt
 
 ## 4. 快速开始
 
-```bash
-# ① 训练（CPU，约 15–45 分钟，取决于步数）
-python scripts/train.py --steps 300000 --rollout 2048 --seed 0 --run-name ppo_main
+> 仓库内已附带一次完整训练的产物 `runs/ppo_v3/`（含评估、消融、13 张附图与
+> 专利格式报告），**可直接查看结果而不必重新训练**。下面是从零复现的完整流程。
 
-# ② 评估 + 导出可视化数据
-python scripts/evaluate.py --run runs/ppo_main --episodes 200
+```bash
+# ① 训练（CPU，约 40 分钟，40 万步）
+python scripts/train.py --steps 400000 --rollout 2048 --seed 0 --out runs --run-name ppo_v3 --quiet
+
+# ② 评估 + 导出可视化数据（200 局配对蒙特卡洛）
+python scripts/evaluate.py --run runs/ppo_v3 --episodes 200 --traces 4 --seed 12345
 
 # ③ 消融实验（分离预测感知 / 残差 RL 各自的贡献）
-python scripts/ablation.py --run runs/ppo_main --episodes 200
+python scripts/ablation.py --run runs/ppo_v3 --episodes 200
 
 # ④ 生成报告全部附图
-python scripts/make_figures.py --run runs/ppo_main
+python scripts/make_figures.py --run runs/ppo_v3
 
-# ⑤ 浏览器 3D 演示（同屏对比：基线 vs 本发明）
-python -m http.server 8080 --directory web
-#   然后打开 http://localhost:8080
+# ⑤ 生成专利格式报告（docx + pdf）
+python scripts/make_report.py --run runs/ppo_v3
+
+# ⑥ 浏览器 3D 演示（同屏对比：基线 vs 本发明）
+cp runs/ppo_v3/data/traces.json web/data/traces.json
+python -m http.server 8099 --directory web
+#   然后打开 http://localhost:8099
 ```
 
 ## 5. 仓库结构
@@ -73,7 +80,7 @@ zq3-recovery-rl/
 │   ├── sensors.py             IMU / GNSS / 气压计，含零偏与随机游走
 │   ├── estimator.py           导航EKF + 姿态EKF + 扰动观测器与风矢量反演
 │   ├── guidance.py            分层解析制导 + 预测前馈 + 安全盾
-│   ├── env.py                 残差 MDP 环境（28 维观测，全部来自估计量）
+│   ├── env.py                 残差 MDP 环境（29 维观测，全部来自估计量）
 │   ├── ppo.py                 自研 PPO（clipped surrogate + GAE）
 │   └── utils.py               种子、IO、Wilson 区间、日志
 ├── scripts/
@@ -122,12 +129,15 @@ zq3-recovery-rl/
 
 ### 6.4 残差 PPO（`ppo.py` / `env.py`）
 
-- 动作 = 有界加速度修正，`‖a_rl‖ ≤ 4 m/s²`（`tanh` 压缩，天然可执行）；
-- 观测 28 维，**全部来自估计量**（含扰动估计、前向预测、已辨识风速、EKF 不确定度）；
+- 动作 = 有界加速度修正，`‖a_rl‖ ≤ 1 m/s²`（`tanh` 压缩，天然可执行）；
+- 观测 29 维，**全部来自估计量**（含扰动估计、前向预测、已辨识风速、EKF 不确定度、
+  以及由加速度计反推的推力亏空）；
 - 奖励 = **势函数塑形** `Φ(s') - Φ(s)` + 姿态/残差努力惩罚 + 终局成败项。
-  势函数塑形可证明**不改变最优策略**，同时把回报从 `O(10⁶)` 压到 `O(10²)`，
-  显著改善价值函数条件数。
-- 四阶段课程：`0.05→0.30→0.60→0.90→1.00` 逐步放开初始条件包线与风速。
+  势函数塑形在折扣因子 `γ = 1` 时可证明**不改变最优策略**，同时把回报从 `O(10⁶)`
+  压到 `O(10²)`，显著改善价值函数条件数。
+  （注意：`γ < 1` 会破坏势函数塑形的望远镜求和性质，并让终局奖励在长回合里被指数衰减，
+  本项目因此固定取 `γ = 1`。）
+- 四阶段课程：`0.05→0.30→0.60→1.00` 逐步放开初始条件包线与风速，55% 进度即到满难度。
 
 ### 6.5 安全盾（`guidance.py`）
 
@@ -137,11 +147,29 @@ zq3-recovery-rl/
 
 ## 7. 结果
 
-见 `runs/ppo_main/figures/` 与报告的"有益效果"一节。核心结论：
+见 `runs/ppo_v3/figures/`、`runs/ppo_v3/课程报告_专利格式.pdf` 与报告"有益效果"一节。
+权威 run 为 **`runs/ppo_v3`**（其余 run 是调试中间产物，见 `runs/README_重要提示.md`）。
 
-- 预测感知前馈与残差 RL 各自独立提升成功率，二者叠加增益最大；
-- 安全盾触发率随训练下降，说明策略学会在可行域内工作；
-- 残余误差的主要来源是状态估计而非控制（由"理想感知"上界变体给出）。
+**200 局配对蒙特卡洛（相同扰动种子）**：
+
+| 控制器 | 成功率 | 95% 置信区间 |
+| --- | --- | --- |
+| 纯解析基线 | 51.5% | [44.6, 58.3] |
+| **本发明（预测感知 + 残差 RL）** | **60.5%** | [53.6, 67.0] |
+
+**消融实验（各 200 局）**：A 基线 45.0% / B 基线+预测 45.0% /
+C 基线+残差RL 53.5% / D 全量 53.5% / E 理想感知 75.5%。核心结论：
+
+- 成功率增益主要来自**有界残差强化学习**（约 +8.5 个百分点）；
+- **预测感知作为解析前馈项的独立增益有限（+0.0 个百分点）**——长下降过程中水平级联
+  已能抑制缓变扰动，预测信息主要通过策略的**观测特征**发挥作用；
+- 残余误差的主要来源是**状态估计而非控制**（"理想感知"上界变体再提升约 22 个百分点），
+  可通过提升传感器精度进一步改善；
+- 安全盾触发率随训练下降，说明策略学会在可行域内工作，而非依赖安全盾兜底。
+
+> **诚实说明**：增益是**温和的**（+9.0pp，两个置信区间有少量重叠；150 局配对验证给出
+> +5.3pp、McNemar p≈0.057）。报告中的定量结论均从 `runs/ppo_v3/data/*.json` 读取，
+> 与实测一致。
 
 ## 8. 可复现性
 
